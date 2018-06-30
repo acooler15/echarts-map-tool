@@ -159,7 +159,9 @@ function createDetailedGeojson(list, isCompressed, cb) {
                 features.push(feature);
 
                 if (reqCount === 0) {
-                    geojson = compress(geojson);
+                    if (isCompressed) {
+                        geojson = compress(geojson);
+                    }
                     cb(geojson);
 
                     district.setSubdistrict(1);
