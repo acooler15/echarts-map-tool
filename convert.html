@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+    <link rel="stylesheet" href="lib/highlight/styles/atelier-dune.light.css">
+</head>
+<body>
+<div class="container" id="main">
+    <div class="row">
+        <div id="configuration" class="col-sm-8">
+            <section id="range">
+                <h3>选择文件</h3>
+                <p>
+                    <label for="geofile">选择地图文件:</label>
+                    <input id='geofile' type="file"></input>
+                </p>
+            </section>
+            <section id="compress">
+                <h3>压缩或解压缩</h3>
+                <p>
+                    <input type="radio" name="compress" value="isDefault" id="isDefault" checked>
+                    <label for="isDefault">不改变</label>
+
+                    <input type="radio" name="compress" value="isCompressed" id="isCompressed">
+                    <label for="isCompressed">压缩版本</label>
+
+                    <input type="radio" name="compress" value="isDeCompressed" id="isDeCompressed">
+                    <label for="isDeCompressed">解压缩版本</label>
+                <p class="desc">压缩后体积占用更小,但是只能使用 UTF-8 编码；解压缩后体积占用更大, 但是适合编辑文件；若只是转换文件格式，则不勾选</p>
+                </p>
+
+            </section>
+            <section id="compress">
+                <h3>地图名称<span>  name</span></h3>
+                <p>
+                    <input id="mapName" class="form-control" value="">
+                </p>
+                <p class="desc">向echarts注册地图时的名称，生成js文件时需要。原文件为js文件时，不填写则按照原来的名称</p>
+            </section>
+
+            <div id="action">
+                <button id="buildJs" class="btn btn-primary">生成 JS</button>
+                <button id="buildJson" class="btn btn-primary">生成 JSON</button>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <!--<section id="preview">-->
+                <!--<h3>预览<span> preview</span></h3>-->
+                <!--<div id="preview-viewport"></div>-->
+            <!--</section>-->
+        </div>
+    </div>
+</div>
+<div id="tmpjs"></div>
+<script src="lib/jquery.js"></script>
+<script src="lib/bootstrap.min.js"></script>
+<script src='lib/FileSaver.min.js'></script>
+<!--<script src="lib/echarts.js"></script>-->
+<script src="js/download.js"></script>
+<script>
+
+    var jsJSON;
+    var mapName;
+    var echarts = {
+        registerMap: function (name,json) {
+            jsJSON = json;
+            mapName = name;
+            document.getElementById('tmpjs').innerHTML='';
+        }
+    };
+</script>
+<script>
+    var fileStr ;
+    // 绑定生成按钮点击事件，触发生成地图数据并下载
+    $('#buildJson').click(downloadJson);
+    $('#buildJs').click(downloadJs);
+
+    function downloadJson() {
+
+        updateAndFetch(function (geoJson) {
+            downloadGeoJson(geoJson);
+        });
+    }
+
+    function downloadJs() {
+
+        updateAndFetch(function (geoJson) {
+            if ($('#mapName').val() != ''){
+                downloadGeoJs(geoJson, $('#mapName').val());
+            }else{
+                if (!mapName){
+                    alert('请填写“地图名称”！ ');
+                }else {
+                    var name = mapName;
+                    mapName = null;
+                    downloadGeoJs(geoJson, name);
+                }
+            }
+
+        });
+    }
+
+    function updateAndFetch(cb) {
+        var json;
+        //获取读取我文件的File对象
+        var selectedFile = document.getElementById('geofile').files[0];
+        var name = selectedFile.name;//读取选中文件的文件名
+        var jsReg = new RegExp('.js$');
+        var jsonReg = new RegExp('.json$');
+        if (name.match(jsReg)) {
+            fileStr = name.replace(jsReg,'');
+            console.log(fileStr);
+            readJavascriptFile(selectedFile,cb);
+        }else if (name.match(jsonReg)) {
+            fileStr = name.replace(jsReg,'');
+            console.log(fileStr);
+            readJSONFile(selectedFile,cb);
+        }
+
+    }
+    function readJSONFile(file,cb) {
+        var reader = new FileReader();//这是核心,读取操作就是由它完成.
+        reader.readAsText(file,'utf-8');//读取文件的内容,也可以读取文件的URL
+        reader.onload = function () {
+            //当读取完成后回调这个函数,然后此时文件的内容存储到了result中,直接操作即可
+            var json = compileJSON(JSON.parse(this.result));
+            cb(json);
+        }
+    }
+    function readJavascriptFile(file,cb) {
+        var reader = new FileReader();//这是核心,读取操作就是由它完成.
+        reader.readAsText(file,'utf-8');//读取文件的内容,也可以读取文件的URL
+        reader.onload = function () {
+            //当读取完成后回调这个函数,然后此时文件的内容存储到了result中,直接操作即可
+            var jsStr = this.result;
+            var script = document.createElement("script");
+            script.type = "text/javascript";
+            script.text = jsStr;
+            document.getElementById('tmpjs').appendChild(script);
+            var json = compileJSON(jsJSON);
+            console.log(json);
+            cb(json);
+        }
+    }
+</script>
+<script>
+    function compileJSON(json){
+        var result;
+        // 是否不改变
+        var isDefault = $('#isDefault').is(':checked');
+        // 是否需要压缩
+        var isCompressed = $("#isCompressed").is(':checked');
+        // 是否需要解压缩
+        var isDeCompressed = $("#isDeCompressed").is(':checked');
+        if (isCompressed){
+            if (!json["UTF8Encoding"]){
+                result = compress(json);
+            }
+        }
+        if (isDeCompressed){
+            if (json["UTF8Encoding"]){
+                result = decode(json);
+            }
+        }
+        if (isDefault){
+            result = jsJSON;
+        }
+        jsJSON = null;
+        return result;
+    }
+</script>
+<script>
+    // var myChart;
+    // function preview(data) {
+    //     if (myChart) {
+    //         myChart.dispose();
+    //     }
+    //     if (! data) {
+    //         document.getElementById('preview-viewport').innerHTML = '无数据';
+    //         return;
+    //     }
+    //     myChart = echarts.init(document.getElementById('preview-viewport'));
+    //     myChart.setOption({
+    //         series : [
+    //             {
+    //                 name:'预览',
+    //                 type:'map',
+    //                 mapType: 'preview',
+    //                 data:[],
+    //                 roam: true,
+    //                 itemStyle: {
+    //                     normal: {
+    //                         borderColor: '#999',
+    //                         color: '#f3f3f3',
+    //                         label: {
+    //                             show:true
+    //                         }
+    //                     },
+    //                     emphasis: {
+    //                         borderColor: '#888',
+    //                         color: '#7bb4e5',
+    //                         label: {
+    //                             show:true
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         ]
+    //     });
+    // }
+</script>
+</body>
+</html>
